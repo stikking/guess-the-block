@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Guess the Block</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Guess the Block</h1>
+    <button id="langBtn" class="btn small">EN</button>
+  </header>
+
+  <!-- Настройки -->
+  <section id="setup">
+    <p data-i18n="subtitle"></p>
+    <label for="nickname" data-i18n="nickname"></label>
+    <input id="nickname" maxlength="30" autocomplete="off">
+    <label data-i18n="difficulty"></label>
+    <div class="diffs">
+      <button class="btn diff" data-diff="easy"></button>
+      <button class="btn diff" data-diff="medium"></button>
+      <button class="btn diff" data-diff="pro"></button>
+    </div>
+    <button id="startBtn" class="btn big" data-i18n="start"></button>
+    <p id="startError" class="error"></p>
+  </section>
+
+    <!-- Игра -->
+  <section id="game" class="hidden">
+    <p id="attemptLabel"></p>
+    <canvas id="canvas" width="320" height="320"></canvas>
+    <div id="guesses" class="guesses hidden"></div>
+    <p id="hintLabel" class="hintLabel hidden"></p>
+    <div id="guessRow" class="guessRow">
+      <div class="guessBox">
+        <input id="guessInput" list="names" autocomplete="off">
+        <div id="suggestions" class="suggestions hidden"></div>
+      </div>
+      <button id="hintBtn" class="btn hint" data-i18n="hint"></button>
+      <button id="guessBtn" class="btn" data-i18n="guess"></button>
+    </div>
+    <datalist id="names"></datalist>
+  </section>
+
+  <!-- Результат -->
+  <section id="result" class="hidden">
+    <p id="resultTitle"></p>
+    <p id="answerName"></p>
+    <button id="againBtn" class="btn big" data-i18n="again"></button>
+  </section>
+
+  <!-- Для конкурсов -->
+  <section id="recent">
+    <h2 data-i18n="recent"></h2>
+    <ul id="recentList"></ul>
+  </section>
+
+  <footer>Minecraft textures © Mojang</footer>
+</div>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

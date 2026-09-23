@@ -1,0 +1,18 @@
+# Текстуры Minecraft — скачиваются get_textures.py, ассеты © Mojang
+static/textures/
+
+# Результаты игроков (ники, конкурсы) — не для публичного репозитория
+data/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Локальные файлы (запасной перевод, если будешь подкладывать)
+ru_ru.json
+
+# Системное
+.DS_Store
+Thumbs.db
