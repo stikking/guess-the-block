@@ -79,17 +79,18 @@ CATEGORY_RULES = [
     (("iron", "gold", "copper", "diamond_", "emerald", "lapis", "coal_block",
       "redstone_block", "netherite", "amethyst", "raw_"), "metal"),
     (("wheat", "carrot", "potato", "beetroot", "melon", "pumpkin", "jack_o",
-      "hay", "cake", "cookie", "sugar", "cocoa", "berries", "honey", "egg"), "farm"),
+      "hay", "cake", "cookie", "sugar", "cocoa", "berries", "honey", "egg",
+      "bee", "composter"), "farm"),
     (("planks", "log", "wood", "hyphae", "stripped", "mosaic", "door", "fence",
       "gate", "trapdoor", "sign", "stem"), "wood"),
-    (("leaves", "sapling", "flower", "grass", "fern", "moss", "vine", "bush",
+    (("leaf", "sapling", "flower", "grass", "fern", "moss", "vine", "bush",
       "sprouts", "fungus", "roots", "propagule", "azalea", "mushroom", "crop",
       "cactus", "cane", "lily", "bamboo", "torchflower", "pitcher", "dripleaf"), "plants"),
     (("wool", "carpet"), "wool"),
-    (("prismarine", "coral", "sea_", "kelp", "sponge", "conduit", "turtle",
-      "bubble"), "sea"),
+    (("prismarine", "coral", "sea_", "seagrass", "kelp", "sponge", "conduit",
+      "turtle", "bubble"), "sea"),
     (("nether", "soul", "magma", "basalt", "blackstone", "nylium", "wart",
-      "respawn", "gilded", "crying", "quartz_", "ancient_debris", "bone"), "nether"),
+      "respawn", "gilded", "crying", "quartz", "ancient_debris", "bone"), "nether"),
     (("end_", "purpur", "chorus", "dragon_egg"), "end"),
     (("torch", "lantern", "lamp", "candle", "glowstone", "shroomlight",
       "glow_", "bulb", "rod"), "light"),
@@ -105,12 +106,41 @@ CATEGORY_RULES = [
       "button", "pressure", "tripwire", "crafter", "stonecutter", "smithing"), "mechanism"),
 ]
 
+# Ручные переопределения: проверяются ПЕРЕД общими правилами.
+# Нужны там, где ключевое слово ловит не то: «egg» внутри dragon_egg,
+# «stone» внутри grindstone, «fence» внутри nether_brick_fence и т.п.
+# Ключ — подстрока в id текстуры, значение — категория.
+CATEGORY_OVERRIDES = [
+    ("dragon_egg", "end"),            # яйцо дракона: «egg» уводил в еду
+    ("turtle", "sea"),                # черепашье яйцо: было «Фермерство»
+    ("sniffer_egg", "other"),         # яйцо нюхача — без подходящей категории
+    ("seagrass", "sea"),              # морская трава: «grass» уводил в растения
+    ("grass_block", "earth"),         # дёрн: «grass» уводил в растения
+    ("soul_torch", "light"),          # факел душ — как обычный факел
+    ("soul_lantern", "light"),        # фонарь душ — как обычный фонарь
+    ("soul_campfire", "mechanism"),   # костёр душ — как обычный костёр
+    ("end_rod", "light"),             # стержень Края — источник света
+    ("lightning_rod", "mechanism"),   # громоотвод — не источник света
+    ("redstone_torch", "mechanism"),  # красный факел — сигнальный механизм
+    ("stonecutter", "mechanism"),     # «stone» внутри слова ловил камень
+    ("grindstone", "mechanism"),      # то же самое
+    ("nether_brick_fence", "nether"), # «fence» уводил в дерево
+]
+
 
 def category_of(block_id):
+    for key, cat in CATEGORY_OVERRIDES:
+        if key in block_id:
+            return cat
     for keywords, cat in CATEGORY_RULES:
         if any(k in block_id for k in keywords):
             return cat
     return "other"
+
+
+# Порядок категорий в каталоге
+CATEGORY_ORDER = ["ore", "metal", "farm", "wood", "plants", "wool", "sea",
+                  "nether", "end", "light", "earth", "stone", "mechanism", "other"]
 
 
 def normalize(text):
@@ -305,14 +335,23 @@ def hint():
 
 @app.get("/api/catalog")
 def catalog():
-    """Каталог блоков для изучения перед игрой: название + картинка."""
+    """Каталог блоков, сгруппированный по категориям подсказок."""
     difficulty = request.args.get("difficulty", "easy")
     lang = request.args.get("lang", "ru")
     key = "ru" if lang == "ru" else "en"
-    items = sorted(POOLS.get(difficulty, []), key=lambda b: b[key].lower())
-    return jsonify([{"name": b[key], "img": f"/static/textures/{b['id']}.png"}
-                    for b in items])
 
+    groups = {}
+    for b in POOLS.get(difficulty, []):
+        cat = category_of(b["id"])
+        groups.setdefault(cat, []).append(
+            {"name": b[key], "img": f"/static/textures/{b['id']}.png"})
+
+    result = []
+    for cat in CATEGORY_ORDER + sorted(set(groups) - set(CATEGORY_ORDER)):
+        if cat in groups:
+            items = sorted(groups[cat], key=lambda x: x["name"].lower())
+            result.append({"key": cat, "items": items})
+    return jsonify(result)
 
 @app.get("/api/names")
 def names():

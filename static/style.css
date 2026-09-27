@@ -75,3 +75,5 @@ li.empty { color: #61656b; font-style: italic; }
 
 /* Уже попробованные варианты в подсказках Профи */
 .sug.tried { color: #868e96; text-decoration: line-through; }
+.catHead { grid-column: 1 / -1; font-weight: 600; color: #ffd43b;
+           font-size: 14px; margin-top: 8px; }

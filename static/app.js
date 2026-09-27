@@ -231,7 +231,7 @@ function moveSuggestion(step) {
 async function openCatalog() {
   try {
     const res = await fetch(`/api/catalog?difficulty=${difficulty}&lang=${lang}`);
-    catalogItems = await res.json();
+    catalogItems = await res.json();   // теперь массив групп по категориям
   } catch (e) {
     catalogItems = [];
   }
@@ -243,25 +243,34 @@ async function openCatalog() {
 
 function renderCatalog() {
   const q = norm($("catalogFilter").value);
-  const items = q ? catalogItems.filter(i => norm(i.name).includes(q)) : catalogItems;
+  const cats = STRINGS[lang].categories;
   const grid = $("catalogGrid");
   grid.innerHTML = "";
-  for (const it of items) {
-    const cell = document.createElement("div");
-    cell.className = "catCell";
-    const img = document.createElement("img");
-    img.src = it.img;
-    img.loading = "lazy";   // не грузим 700 картинок разом
-    img.alt = it.name;
-    img.title = it.name;
-    const name = document.createElement("div");
-    name.className = "catName";
-    name.textContent = it.name;
-    cell.append(img, name);
-    grid.appendChild(cell);
+  for (const group of catalogItems) {
+    const items = q ? group.items.filter(i => norm(i.name).includes(q)) : group.items;
+    if (!items.length) continue;   // при поиске прячем пустые категории
+
+    const head = document.createElement("div");
+    head.className = "catHead";
+    head.textContent = cats[group.key] || group.key;
+    grid.appendChild(head);
+
+    for (const it of items) {
+      const cell = document.createElement("div");
+      cell.className = "catCell";
+      const img = document.createElement("img");
+      img.src = it.img;
+      img.loading = "lazy";
+      img.alt = it.name;
+      img.title = it.name;
+      const name = document.createElement("div");
+      name.className = "catName";
+      name.textContent = it.name;
+      cell.append(img, name);
+      grid.appendChild(cell);
+    }
   }
 }
-
 // ---------- Игра ----------
 async function startGame() {
   const nick = $("nickname").value.trim();

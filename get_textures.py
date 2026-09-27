@@ -3,13 +3,14 @@
 Скачивает официальные текстуры блоков Minecraft (последняя стабильная версия)
 и официальные названия блоков.
 
-Каждая текстура помечается id блока ("block") и рангом ("rank") — насколько
-эта текстура хорошо представляет блок. У блока бывает несколько текстур
-(бок, верх, варианты вроде vault_top_ejecting), но в игру попадёт одна.
+Особенности:
+- каждая текстура помечается id блока ("block") и рангом ("rank");
+- обесцвеченные текстуры (листва, трава) красим цветами, которыми их
+  красит сама игра — в jar они хранятся серыми под покраску биомом.
 
 Результат:
   static/textures/*.png      — текстуры (первый кадр для анимаций)
-  static/textures/names.json — {"ru", "en", "block", "rank"} для каждой текстуры
+  static/textures/names.json — {"ru", "en", "block", "rank"}
 """
 import io
 import json
@@ -31,7 +32,6 @@ SKIP = {f"destroy_stage_{i}" for i in range(10)} | {
 }
 SKIP_ENDINGS = ("_overlay",)
 
-# Служебные «хвосты» имени текстуры: грань или состояние, а не часть названия
 STRIP_WORDS = {
     "top", "bottom", "side", "front", "back", "inner", "outer", "end",
     "on", "off", "sticky", "moist", "inverted", "empty", "lit",
@@ -40,8 +40,31 @@ STRIP_WORDS = {
     "save", "load", "data", "corner", "tendril", "active", "idle", "lines",
     "lower", "upper", "left", "right", "snow", "ominous", "ejecting",
 }
-# Насколько текстура хорошо «представляет» блок (меньше = лучше)
 FACE_RANK = {"side": 1, "front": 2, "top": 3, "bottom": 4, "lower": 4, "upper": 4}
+
+# Цвета покраски (значения из кода игры).
+LEAF_GREEN = (119, 171, 47)      # листва дуба/джунглей/акации/тёмного дуба/мангра
+GRASS_GREEN = (145, 189, 89)     # травяные текстуры, цвет равнины
+TINTS = {
+    "oak_leaves": LEAF_GREEN,
+    "jungle_leaves": LEAF_GREEN,
+    "acacia_leaves": LEAF_GREEN,
+    "dark_oak_leaves": LEAF_GREEN,
+    "mangrove_leaves": LEAF_GREEN,
+    "spruce_leaves": (97, 153, 97),   # у ели в игре фиксированный цвет
+    "birch_leaves": (128, 167, 85),   # у берёзы тоже
+    "grass_block_top": GRASS_GREEN,
+    "short_grass": GRASS_GREEN,
+    "grass": GRASS_GREEN,             # старое имя short_grass (на всякий случай)
+    "tall_grass": GRASS_GREEN,
+    "fern": GRASS_GREEN,
+    "large_fern_top": GRASS_GREEN,
+    "large_fern_bottom": GRASS_GREEN,
+    "bush": GRASS_GREEN,
+    "sugar_cane": GRASS_GREEN,
+    "vine": LEAF_GREEN,
+}
+# Азалия и вишня НЕ в списке — их текстуры в jar уже цветные.
 
 
 def get_json(url):
@@ -109,13 +132,12 @@ def strippable(token):
     """Слово — служебный хвост (грань/состояние), а не часть названия?"""
     if token in STRIP_WORDS or token.isdigit() or token.startswith("stage"):
         return True
-    # Варианты вида side1, side2 — цифра «приклеилась» к слову грани
-    bare = token.rstrip("0123456789")
+    bare = token.rstrip("0123456789")   # варианты вида side1, side2
     return bare != token and bare in STRIP_WORDS
 
 
 def find_block(stem, blocks):
-    """Сопоставляет текстуру с блоком напрямую. Возвращает (id блока, ранг)."""
+    """Сопоставляет текстуру с блоком. Возвращает (id блока, ранг)."""
     if stem in blocks:
         return stem, 0
     tokens = stem.split("_")
@@ -135,11 +157,9 @@ def find_block(stem, blocks):
 
 
 def resolve_variants(mapping):
-    """Страховка: текстуры-варианты, которым не нашлось блока напрямую,
-    наследуют его от «родительской» текстуры. Отрезаем последнее слово,
-    пока не получим имя уже сопоставленной текстуры:
-    vault_top_ejecting -> vault_top (у неё блок vault) -> наследуем vault."""
-    for stem in sorted(mapping, key=lambda s: s.count("_")):  # короткие — первыми
+    """Варианты без прямого сопоставления наследуют блок от родительской
+    текстуры: vault_top_ejecting -> vault_top (vault)."""
+    for stem in sorted(mapping, key=lambda s: s.count("_")):
         if mapping[stem][0] is not None:
             continue
         tokens = stem.split("_")
@@ -147,8 +167,18 @@ def resolve_variants(mapping):
             tokens.pop()
             parent = "_".join(tokens)
             if parent in mapping and mapping[parent][0] is not None:
-                mapping[stem] = [mapping[parent][0], 5]  # ранг 5 — обычный вариант
+                mapping[stem] = [mapping[parent][0], 5]
                 break
+
+
+def apply_tint(path, rgb):
+    """Красим обесцвеченную текстуру: каждый канал умножается на долю цвета."""
+    img = Image.open(path).convert("RGBA")
+    r, g, b, a = img.split()
+    r = r.point(lambda v: v * rgb[0] // 255)
+    g = g.point(lambda v: v * rgb[1] // 255)
+    b = b.point(lambda v: v * rgb[2] // 255)
+    Image.merge("RGBA", (r, g, b, a)).save(path)
 
 
 def main():
@@ -170,8 +200,9 @@ def main():
                 blocks[bid] = {"en": en, "ru": ru_lang.get(key, en)}
 
         DEST.mkdir(parents=True, exist_ok=True)
-        mapping = {}  # имя текстуры -> [id блока или None, ранг]
+        mapping = {}
         count = 0
+        tinted = 0
         for name in z.namelist():
             if not name.startswith(BLOCK_DIR) or not name.endswith(".png"):
                 continue
@@ -192,6 +223,10 @@ def main():
                 continue
             count += 1
 
+            if stem in TINTS:
+                apply_tint(path, TINTS[stem])
+                tinted += 1
+
             mapping[stem] = list(find_block(stem, blocks))
 
         resolve_variants(mapping)
@@ -211,12 +246,8 @@ def main():
 
     unique = len({v["block"] for v in names.values() if v["block"]})
     print(f"Готово! {count} текстур, из них с официальным названием: {official}")
+    print(f"Покрашено обесцвеченных текстур: {tinted}")
     print(f"Уникальных блоков: {unique}")
-    print("Проверка вариантов (должно быть имя блока, без «Side1»):")
-    for sample in ("cartography_table_side1", "vault_top_ejecting", "stone"):
-        if sample in names:
-            v = names[sample]
-            print(f"  {sample} -> {v['ru']} / {v['en']} (блок: {v['block']})")
 
 
 if __name__ == "__main__":
