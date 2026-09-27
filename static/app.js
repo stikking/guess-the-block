@@ -1,20 +1,24 @@
 // ---------- Переводы ----------
 const STRINGS = {
   ru: {
-    subtitle: "Игра загадывает блок и показывает 1 случайный пиксель его текстуры. У тебя 4 попытки — после каждой ошибки открывается больше пикселей (1 → 4 → 9 → 16).",
+    subtitle: "Игра загадывает блок и показывает 1 случайный пиксель текстуры. С каждой ошибкой пикселей становится больше (1 → 4 → 9 → 16). Попыток: 4, в Профи — 5 (последняя открывает ещё 5 пикселей). Совет: перед игрой загляни в каталог блоков!",
     nickname: "Твой никнейм:",
     difficulty: "Сложность:",
     easy: "Лёгкая", medium: "Средняя", pro: "Профи",
     start: "Начать игру",
+    catalog: "Каталог блоков",
+    back: "← Назад",
+    catalogFilter: "Найти блок...",
     enterNickname: "Сначала введи никнейм 🙂",
-    attempt: "Попытка {n} из 4",
+    attempt: "Попытка {n} из {m}",
     guessPlaceholder: "Введи название блока...",
     guess: "Ответить",
     hint: "Подсказка",
     hintUsed: "Категория блока: «{c}»",
-    categories: { ore: "Руда", metal: "Металлы и минералы", stone: "Камень и кирпичи",
-      earth: "Земля", wood: "Дерево", plants: "Растения", sea: "Море",
-      nether: "Незер", end: "Край", mechanism: "Механизмы и свет", other: "Другое" },
+    categories: { ore: "Руда", metal: "Металлы и минералы", farm: "Фермерство и еда",
+      wood: "Дерево", plants: "Растения", wool: "Шерсть и ткани", sea: "Море",
+      nether: "Незер", end: "Край", light: "Свет", earth: "Земля",
+      stone: "Камень и кирпичи", mechanism: "Механизмы", other: "Другое" },
     tried: "Уже пробовал(а):",
     win: "🎉 В точку!",
     lose: "😢 Попытки кончились. Это был(а):",
@@ -26,20 +30,24 @@ const STRINGS = {
     genericError: "Ошибка, попробуй ещё раз",
   },
   en: {
-    subtitle: "The game picks a block and shows 1 random pixel of its texture. You have 4 tries — each miss reveals more pixels (1 → 4 → 9 → 16).",
+    subtitle: "The game picks a block and shows 1 random pixel of its texture. Each miss reveals more pixels (1 → 4 → 9 → 16). You have 4 tries — 5 in Pro (the last one reveals 5 more pixels). Tip: browse the block catalog before playing!",
     nickname: "Your nickname:",
     difficulty: "Difficulty:",
     easy: "Easy", medium: "Medium", pro: "Pro",
     start: "Start game",
+    catalog: "Block catalog",
+    back: "← Back",
+    catalogFilter: "Find a block...",
     enterNickname: "Enter a nickname first 🙂",
-    attempt: "Attempt {n} of 4",
+    attempt: "Attempt {n} of {m}",
     guessPlaceholder: "Type the block name...",
     guess: "Guess",
     hint: "Hint",
     hintUsed: "Block category: \"{c}\"",
-    categories: { ore: "Ore", metal: "Metals & minerals", stone: "Stone & bricks",
-      earth: "Earth", wood: "Wood", plants: "Plants", sea: "Ocean",
-      nether: "The Nether", end: "The End", mechanism: "Mechanisms & light", other: "Other" },
+    categories: { ore: "Ore", metal: "Metals & minerals", farm: "Farming & food",
+      wood: "Wood", plants: "Plants", wool: "Wool & fabric", sea: "Ocean",
+      nether: "The Nether", end: "The End", light: "Light", earth: "Earth",
+      stone: "Stone & bricks", mechanism: "Mechanisms", other: "Other" },
     tried: "Already tried:",
     win: "🎉 Nailed it!",
     lose: "😢 Out of tries. It was:",
@@ -55,15 +63,18 @@ const STRINGS = {
 // ---------- Состояние ----------
 let lang = localStorage.getItem("gtb_lang") || "ru";
 let difficulty = localStorage.getItem("gtb_diff") || "easy";
-let gameId = null;         // id текущей игры
-let revealed = [];         // индексы открытых пикселей
-let tex = null;            // картинка с текстурой загаданного блока
-let currentLevel = 0;      // номер текущей попытки
-let names = [];            // названия на текущем языке (для списка браузера)
-let proNames = [];         // названия на двух языках (для подсказок Профи)
-let sugIndex = -1;         // выбранная подсказка (только режим Профи)
-let suppressFocus = false; // не открывать список при программном фокусе
-let hintCategory = null;   // категория, показанная в подсказке
+let gameId = null;
+let revealed = [];
+let tex = null;
+let currentLevel = 0;
+let maxWrong = 4;          // попыток в текущей игре (5 в Профи)
+let names = [];
+let proNames = [];
+let sugIndex = -1;
+let suppressFocus = false;
+let hintCategory = null;
+let triedList = [];        // что игрок уже называл (для подсветки)
+let catalogItems = [];     // содержимое каталога
 
 const $ = (id) => document.getElementById(id);
 
@@ -78,15 +89,15 @@ function applyLang() {
   document.querySelectorAll(".diff").forEach(b => b.textContent = t(b.dataset.diff));
   $("langBtn").textContent = lang === "ru" ? "EN" : "RU";
   $("guessInput").placeholder = t("guessPlaceholder");
+  $("catalogFilter").placeholder = t("catalogFilter");
   document.documentElement.lang = lang;
-  if (currentLevel) $("attemptLabel").textContent = t("attempt", {n: currentLevel});
+  if (currentLevel) $("attemptLabel").textContent = t("attempt", {n: currentLevel, m: maxWrong});
   if (hintCategory) {
     const cats = STRINGS[lang].categories;
     $("hintLabel").textContent = t("hintUsed", {c: cats[hintCategory] || cats.other});
   }
 }
 
-// Лёгкая/средняя — родной список браузера (datalist), Профи — свои подсказки
 function applyInputMode() {
   const input = $("guessInput");
   if (difficulty === "pro") {
@@ -97,7 +108,6 @@ function applyInputMode() {
   }
 }
 
-// Фокус «как от игрока»: список не раскрываем сами
 function focusGuessInput() {
   suppressFocus = true;
   $("guessInput").focus();
@@ -124,7 +134,6 @@ function renderGuesses(list) {
 // ---------- Умный поиск для режима Профи ----------
 const norm = (s) => s.toLowerCase().replace(/ё/g, "е").trim();
 
-// Соответствие клавиш двух раскладок: «fk» найдёт «Алмазный...»
 const EN_RU = { q:"й", w:"ц", e:"у", r:"к", t:"е", y:"н", u:"г", i:"ш", o:"щ", p:"з",
                 a:"ф", s:"ы", d:"в", f:"а", g:"п", h:"р", j:"о", k:"л", l:"д",
                 z:"я", x:"ч", c:"с", v:"м", b:"и", n:"т", m:"ь",
@@ -174,14 +183,13 @@ function renderSuggestions() {
   if (difficulty !== "pro") { hideSuggestions(); return; }
 
   const q = $("guessInput").value.trim();
-  // Пустой ввод — показываем весь список, как родной datalist в лёгкой/средней.
-  // Если на слабом компьютере будет подтормаживать — замени на proNames.slice(0, 300)
   const matches = q ? matchNames(q) : proNames;
   if (!matches.length) { hideSuggestions(); return; }
   if (sugIndex >= matches.length) sugIndex = matches.length - 1;
 
-  // Две колонки: первая половина — слева, вторая — справа.
-  // Порядок прежний, поэтому стрелки и Enter работают как раньше.
+  // Уже попробованные варианты — серым с зачёркиванием
+  const triedSet = new Set(triedList.map(norm));
+
   const half = Math.ceil(matches.length / 2);
   const cols = [matches.slice(0, half), matches.slice(half)];
 
@@ -193,8 +201,9 @@ function renderSuggestions() {
     for (const n of col) {
       const el = document.createElement("div");
       el.className = "sug" + (idx === sugIndex ? " active" : "");
+      if (triedSet.has(norm(n))) el.classList.add("tried");
       el.textContent = n;
-      el.title = n;  // полное название при наведении, если текст обрезался
+      el.title = n;
       el.onclick = () => pickSuggestion(n);
       colBox.appendChild(el);
       idx++;
@@ -207,7 +216,7 @@ function renderSuggestions() {
 function pickSuggestion(name) {
   $("guessInput").value = name;
   hideSuggestions();
-  focusGuessInput();  // возвращаем фокус, но список заново не открываем
+  focusGuessInput();
 }
 
 function moveSuggestion(step) {
@@ -216,6 +225,41 @@ function moveSuggestion(step) {
   sugIndex = (sugIndex + step + items.length) % items.length;
   items.forEach((el, i) => el.classList.toggle("active", i === sugIndex));
   items[sugIndex].scrollIntoView({block: "nearest"});
+}
+
+// ---------- Каталог блоков (только перед игрой) ----------
+async function openCatalog() {
+  try {
+    const res = await fetch(`/api/catalog?difficulty=${difficulty}&lang=${lang}`);
+    catalogItems = await res.json();
+  } catch (e) {
+    catalogItems = [];
+  }
+  $("catalogFilter").value = "";
+  renderCatalog();
+  $("setup").classList.add("hidden");
+  $("catalog").classList.remove("hidden");
+}
+
+function renderCatalog() {
+  const q = norm($("catalogFilter").value);
+  const items = q ? catalogItems.filter(i => norm(i.name).includes(q)) : catalogItems;
+  const grid = $("catalogGrid");
+  grid.innerHTML = "";
+  for (const it of items) {
+    const cell = document.createElement("div");
+    cell.className = "catCell";
+    const img = document.createElement("img");
+    img.src = it.img;
+    img.loading = "lazy";   // не грузим 700 картинок разом
+    img.alt = it.name;
+    img.title = it.name;
+    const name = document.createElement("div");
+    name.className = "catName";
+    name.textContent = it.name;
+    cell.append(img, name);
+    grid.appendChild(cell);
+  }
 }
 
 // ---------- Игра ----------
@@ -239,12 +283,15 @@ async function startGame() {
   gameId = data.game_id;
   revealed = data.revealed;
   currentLevel = 1;
+  maxWrong = data.max_wrong || 4;
+  triedList = data.guesses || [];
 
   $("setup").classList.add("hidden");
+  $("catalog").classList.add("hidden");
   $("result").classList.add("hidden");
   $("guessRow").classList.remove("hidden");
   $("game").classList.remove("hidden");
-  $("attemptLabel").textContent = t("attempt", {n: 1});
+  $("attemptLabel").textContent = t("attempt", {n: 1, m: maxWrong});
   $("guessInput").value = "";
   renderGuesses(data.guesses);
   hintCategory = null;
@@ -259,10 +306,9 @@ async function startGame() {
   tex.onload = draw;
 }
 
-// Рисуем текстуру на холсте: закрытые пиксели — чёрные
 function draw() {
   const ctx = $("canvas").getContext("2d");
-  const cell = 20; // 16 пикселей текстуры по 20 px на экране
+  const cell = 20;
   ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = "#111";
   ctx.fillRect(0, 0, 320, 320);
@@ -286,6 +332,7 @@ async function submitGuess() {
   const data = await res.json();
   if (!res.ok) return;
 
+  triedList = data.guesses || triedList;
   renderGuesses(data.guesses);
 
   if (data.over) {
@@ -296,7 +343,7 @@ async function submitGuess() {
     revealed = data.revealed;
     currentLevel = data.level;
     draw();
-    $("attemptLabel").textContent = t("attempt", {n: data.level});
+    $("attemptLabel").textContent = t("attempt", {n: data.level, m: maxWrong});
     $("guessInput").value = "";
     focusGuessInput();
   }
@@ -304,10 +351,8 @@ async function submitGuess() {
 
 function showResult(data) {
   currentLevel = 0;
-  // Закрываем все выпадающие списки, чтобы не перекрывали результат:
-  hideSuggestions();        // свой список подсказок (Профи)
-  $("guessInput").blur();   // родной список браузера (Лёгкая/Средняя):
-                            // Chrome не убирает его, если просто скрыть поле
+  hideSuggestions();
+  $("guessInput").blur();
   $("guessRow").classList.add("hidden");
   $("attemptLabel").textContent = "";
   $("hintLabel").classList.add("hidden");
@@ -325,10 +370,9 @@ async function loadNames() {
     const res = await fetch(`/api/names?difficulty=${difficulty}&lang=${lang}`);
     names = await res.json();
   } catch (e) {
-    names = [];  // даже при сбое игра не должна ломаться
+    names = [];
   }
 
-  // заполняем родной список браузера (лёгкая/средняя)
   const dl = $("names");
   dl.innerHTML = "";
   for (const n of names) {
@@ -337,7 +381,6 @@ async function loadNames() {
     dl.appendChild(opt);
   }
 
-  // Для Профи — названия на ОБОИХ языках, отсортированные один раз
   if (difficulty === "pro") {
     const other = lang === "ru" ? "en" : "ru";
     try {
@@ -372,7 +415,8 @@ async function loadRecent() {
     for (const r of items) {
       const li = document.createElement("li");
       const block = lang === "ru" ? r.block_ru : r.block_en;
-      li.textContent = `${r.won ? "✅" : "❌"}${r.hint ? "💡" : ""} ${r.nickname} — ${t(r.difficulty)} — ${block} (${r.attempts}/4)`;
+      const total = r.difficulty === "pro" ? 5 : 4;
+      li.textContent = `${r.won ? "✅" : "❌"}${r.hint ? "💡" : ""} ${r.nickname} — ${t(r.difficulty)} — ${block} (${r.attempts}/${total})`;
       list.appendChild(li);
     }
   } catch (e) {
@@ -395,10 +439,16 @@ document.querySelectorAll(".diff").forEach(b => {
 });
 
  $("startBtn").onclick = startGame;
+ $("catalogBtn").onclick = openCatalog;
+ $("catalogBack").onclick = () => {
+  $("catalog").classList.add("hidden");
+  $("setup").classList.remove("hidden");
+};
+ $("catalogFilter").addEventListener("input", renderCatalog);
+
  $("guessBtn").onclick = submitGuess;
  $("nickname").addEventListener("keydown", e => { if (e.key === "Enter") startGame(); });
 
-// Клик/таб-переход на поле — раскрываем список (весь, если поле пустое)
 function maybeShowSuggestions() {
   if (difficulty !== "pro" || suppressFocus) return;
   sugIndex = -1;
@@ -406,7 +456,6 @@ function maybeShowSuggestions() {
 }
  $("guessInput").addEventListener("focus", maybeShowSuggestions);
  $("guessInput").addEventListener("click", () => {
-  // если список уже открыт — не перерисовываем, иначе раскрываем заново
   if ($("suggestions").classList.contains("hidden")) maybeShowSuggestions();
 });
 
@@ -420,17 +469,15 @@ function maybeShowSuggestions() {
       const item = $("suggestions").querySelectorAll(".sug")[sugIndex];
       pickSuggestion(item.textContent);
     } else {
-      submitGuess();  // Enter без выбранной подсказки = отправить ответ
+      submitGuess();
     }
   }
   else if (e.key === "Escape") hideSuggestions();
 });
-// клик мимо списка — закрыть подсказки
 document.addEventListener("click", e => {
   if (!e.target.closest(".guessBox")) hideSuggestions();
 });
 
-// Кнопка подсказки — показывает категорию блока, один раз за партию
  $("hintBtn").onclick = async () => {
   if (!gameId || $("hintBtn").disabled) return;
   const res = await fetch("/api/hint", {

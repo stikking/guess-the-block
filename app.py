@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request, send_file
+from PIL import Image
 
 from blocks import EASY_BLOCKS, MEDIUM_BLOCKS
 
@@ -16,9 +17,11 @@ TEXTURES_DIR = Path("static/textures")
 RESULTS_FILE = Path("data/results.json")
 NAMES_FILE = TEXTURES_DIR / "names.json"
 
-SIZE = 16                       # текстуры блоков 16x16
-MAX_WRONG = 4                   # 4 попытки
-LEVEL_PIXELS = [1, 5, 14, 30]   # открыто пикселей после каждой попытки: 1, +4, +9, +16
+SIZE = 16
+# Открыто пикселей ПОСЛЕ каждой попытки: 1 → 4 → 9 → 16 → +5 (5-я только в Профи)
+PIXELS_AFTER = [1, 5, 14, 30, 35]
+BASE_MAX_WRONG = 4   # попыток в лёгкой и средней
+PRO_MAX_WRONG = 5    # попыток в Профи
 
 SKIP_IDS = {f"destroy_stage_{i}" for i in range(10)} | {
     "fire_0", "fire_1", "soul_fire_0", "soul_fire_1",
@@ -27,59 +30,88 @@ SKIP_IDS = {f"destroy_stage_{i}" for i in range(10)} | {
     "campfire_fire", "soul_campfire_fire",
 }
 
+# Блоки, которые НЕ загадываем: технические, невидимые или неугадываемые
+HIDDEN_BLOCKS = {
+    "vault", "vault_ominous", "trial_spawner", "ominous_item_spawner",
+    "infested_stone", "infested_cobblestone", "infested_stone_bricks",
+    "infested_mossy_stone_bricks", "infested_cracked_stone_bricks",
+    "infested_chiseled_stone_bricks", "infested_deepslate",
+    "frosted_ice",
+    "light", "structure_void", "moving_piston",
+    "piston_extended", "test_block", "test_instance_block",
+}
+
 # Официальные названия блоков (создаёт get_textures.py)
 NAMES = {}
 if NAMES_FILE.exists():
     NAMES = json.loads(NAMES_FILE.read_text(encoding="utf-8"))
 
-# Блоки, которые НЕ загадываем: технические, невидимые или неугадываемые.
-# Узнаваемые (командный блок, пазл, структурный блок) — остаются.
-HIDDEN_BLOCKS = {
-    # механизмы испытательных комнат
-    "vault", "vault_ominous", "trial_spawner", "ominous_item_spawner",
-    # заражённые блоки: текстуры идентичны обычным камням — неугадываемо
-    "infested_stone", "infested_cobblestone", "infested_stone_bricks",
-    "infested_mossy_stone_bricks", "infested_cracked_stone_bricks",
-    "infested_chiseled_stone_bricks", "infested_deepslate",
-    # выглядит как обычный лёд
-    "frosted_ice",
-    # невидимые и технические
-    "light", "structure_void", "moving_piston",
-    "piston_extended", "test_block", "test_instance_block",
-}
 
-# Категории для подсказки: (ключевые слова в id блока, категория).
-# Порядок важен: сначала специфичные.
+def load_visible_pixels():
+    """Для каждой текстуры — индексы НЕПРОЗРАЧНЫХ пикселей.
+    У маленьких текстур (факел, цветок, рельсы) большинство пикселей прозрачные:
+    открываем случайные только среди видимых, иначе игрок может за всю игру
+    так и не увидеть ни одного настоящего пикселя."""
+    visible = {}
+    if TEXTURES_DIR.exists():
+        for png in TEXTURES_DIR.glob("*.png"):
+            try:
+                img = Image.open(png).convert("RGBA")
+            except Exception:
+                continue
+            px = img.load()
+            idxs = [y * SIZE + x
+                    for y in range(min(img.height, SIZE))
+                    for x in range(min(img.width, SIZE))
+                    if px[x, y][3] > 0]
+            if idxs:
+                visible[png.stem] = idxs
+    return visible
+
+
+print("Индексирую видимые пиксели текстур...")
+VISIBLE = load_visible_pixels()
+print(f"Готово: {len(VISIBLE)} текстур.")
+
+# Категории для подсказки. Порядок важен: сначала частные.
 CATEGORY_RULES = [
     (("ore",), "ore"),
-    (("nether", "soul", "magma", "basalt", "blackstone", "nylium", "wart",
-      "glowstone", "shroomlight", "respawn", "gilded", "crying", "quartz_"), "nether"),
-    (("end_stone", "purpur", "chorus", "end_rod", "dragon_egg", "end_portal"), "end"),
-    (("prismarine", "coral", "sea", "kelp", "sponge"), "sea"),
+    (("iron", "gold", "copper", "diamond_", "emerald", "lapis", "coal_block",
+      "redstone_block", "netherite", "amethyst", "raw_"), "metal"),
+    (("wheat", "carrot", "potato", "beetroot", "melon", "pumpkin", "jack_o",
+      "hay", "cake", "cookie", "sugar", "cocoa", "berries", "honey", "egg"), "farm"),
+    (("planks", "log", "wood", "hyphae", "stripped", "mosaic", "door", "fence",
+      "gate", "trapdoor", "sign", "stem"), "wood"),
     (("leaves", "sapling", "flower", "grass", "fern", "moss", "vine", "bush",
       "sprouts", "fungus", "roots", "propagule", "azalea", "mushroom", "crop",
-      "wheat", "carrot", "potato", "beetroot", "melon", "pumpkin", "cactus",
-      "cane", "lily", "bamboo", "torchflower", "pitcher", "dripleaf"), "plants"),
-    (("planks", "log", "wood", "stem", "hyphae", "stripped", "mosaic"), "wood"),
+      "cactus", "cane", "lily", "bamboo", "torchflower", "pitcher", "dripleaf"), "plants"),
+    (("wool", "carpet"), "wool"),
+    (("prismarine", "coral", "sea_", "kelp", "sponge", "conduit", "turtle",
+      "bubble"), "sea"),
+    (("nether", "soul", "magma", "basalt", "blackstone", "nylium", "wart",
+      "respawn", "gilded", "crying", "quartz_", "ancient_debris", "bone"), "nether"),
+    (("end_", "purpur", "chorus", "dragon_egg"), "end"),
+    (("torch", "lantern", "lamp", "candle", "glowstone", "shroomlight",
+      "glow_", "bulb", "rod"), "light"),
     (("dirt", "sand", "gravel", "clay", "soil", "mud", "podzol", "mycelium",
       "snow", "ice", "permafrost"), "earth"),
-    (("iron", "gold", "copper", "diamond", "emerald", "lapis", "coal",
-      "redstone", "netherite", "amethyst", "raw_"), "metal"),
     (("stone", "cobble", "granite", "diorite", "andesite", "tuff", "deepslate",
       "calcite", "dripstone", "obsidian", "bedrock", "bricks", "terracotta"), "stone"),
     (("furnace", "chest", "hopper", "dispenser", "dropper", "piston", "observer",
       "rail", "anvil", "cauldron", "bell", "lectern", "loom", "cartography",
-      "grindstone", "smoker", "blast", "barrel", "beacon", "enchanting",
-      "brewing", "command", "jukebox", "note_block", "target", "daylight",
-      "torch", "lantern", "candle", "lamp", "rod", "chain", "campfire",
-      "comparator", "repeater", "lever", "shulker", "conduit", "table"), "mechanism"),
+      "grindstone", "smoker", "barrel", "beacon", "enchanting", "brewing",
+      "command", "jukebox", "note_block", "target", "daylight", "chain",
+      "campfire", "comparator", "repeater", "lever", "shulker", "table",
+      "button", "pressure", "tripwire", "crafter", "stonecutter", "smithing"), "mechanism"),
 ]
+
 
 def category_of(block_id):
     for keywords, cat in CATEGORY_RULES:
         if any(k in block_id for k in keywords):
             return cat
     return "other"
+
 
 def normalize(text):
     """Ответ игрока к единому виду: нижний регистр, без ё."""
@@ -91,13 +123,7 @@ def fallback_name(block_id):
 
 
 def build_pools():
-    """Пулы блоков: easy < medium < pro.
-
-    В «Профи» у каждого блока одна карточка: из всех его текстур (бок, верх,
-    варианты) берём самую узнаваемую — по рангу из names.json.
-    Текстуры, которым не нашёлся блок, в игру НЕ попадают совсем —
-    поэтому мусора вида «Cartography Table Side1» больше не будет.
-    """
+    """Пулы блоков: easy < medium < pro (по одной текстуре на блок)."""
     easy = [b for b in EASY_BLOCKS if (TEXTURES_DIR / (b["id"] + ".png")).exists()]
     medium = easy + [b for b in MEDIUM_BLOCKS if (TEXTURES_DIR / (b["id"] + ".png")).exists()]
 
@@ -106,9 +132,7 @@ def build_pools():
         info = NAMES.get(b["id"], {})
         used_blocks.add(info.get("block") or "#" + b["id"])
 
-    # Для каждого блока ищем лучшую текстуру: меньший ранг выигрывает,
-    # при равенстве — идущая раньше по алфавиту
-    best = {}  # block_key -> (ранг, имя текстуры)
+    best = {}
     if TEXTURES_DIR.exists():
         for png in sorted(TEXTURES_DIR.glob("*.png")):
             stem = png.stem
@@ -116,7 +140,7 @@ def build_pools():
                 continue
             info = NAMES.get(stem)
             if not info or not info.get("block"):
-                continue  # не сопоставлена с блоком — в игру не берём
+                continue
             block_key = info["block"]
             if block_key in used_blocks or block_key in HIDDEN_BLOCKS or stem in HIDDEN_BLOCKS:
                 continue
@@ -143,20 +167,20 @@ def build_pools():
 
 
 POOLS = build_pools()
-GAMES = {}  # id игры -> её состояние
+GAMES = {}
 
 
 def open_pixels(game, total):
-    """Открываем случайные пиксели, пока их не станет `total`."""
-    while len(game["revealed"]) < total:
-        idx = random.randrange(SIZE * SIZE)
+    """Открываем случайные пиксели, но только среди видимых (не прозрачных)."""
+    pool = VISIBLE.get(game["answer"]["id"]) or list(range(SIZE * SIZE))
+    target = min(total, len(pool))  # у крошечных текстур видимых может быть меньше
+    while len(game["revealed"]) < target:
+        idx = random.choice(pool)
         if idx not in game["revealed"]:
             game["revealed"].append(idx)
 
 
 def accepted_answers(block):
-    """Все варианты ответа, которые считаем правильными:
-    наши названия + официальные названия из игры."""
     answers = {block["ru"], block["en"]}
     official = NAMES.get(block["id"])
     if official:
@@ -165,7 +189,6 @@ def accepted_answers(block):
 
 
 def save_result(game, won):
-    """Пишем результат в data/results.json — пригодится для конкурсов."""
     RESULTS_FILE.parent.mkdir(exist_ok=True)
     results = []
     if RESULTS_FILE.exists():
@@ -178,16 +201,14 @@ def save_result(game, won):
         "difficulty": game["difficulty"],
         "block_ru": game["answer"]["ru"],
         "block_en": game["answer"]["en"],
-        "attempts": game["wrong"] + 1 if won else MAX_WRONG,
+        "attempts": game["wrong"] + 1 if won else game["max_wrong"],
         "won": won,
-        "time": datetime.now().strftime("%Y-%m-%d %H:%M"),
         "hint": game.get("hint_used", False),
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M"),
     })
     RESULTS_FILE.write_text(json.dumps(results[-200:], ensure_ascii=False, indent=2),
                             encoding="utf-8")
 
-
-# ---------------- страницы и API ----------------
 
 @app.get("/")
 def index():
@@ -207,20 +228,21 @@ def start():
         "answer": block,
         "revealed": [],
         "wrong": 0,
-        "guesses": [],   # что игрок уже называл — показываем под картинкой
+        "guesses": [],
+        "hint_used": False,
+        "max_wrong": PRO_MAX_WRONG if difficulty == "pro" else BASE_MAX_WRONG,
         "nickname": (data.get("nickname") or "Аноним").strip()[:30],
         "difficulty": difficulty,
-        "hint_used": False,
     }
-    open_pixels(game, LEVEL_PIXELS[0])  # сразу открываем 1 пиксель
+    open_pixels(game, PIXELS_AFTER[0])
     GAMES[game_id] = game
     return jsonify({"game_id": game_id, "level": 1,
-                    "revealed": game["revealed"], "guesses": []})
+                    "revealed": game["revealed"], "guesses": [],
+                    "max_wrong": game["max_wrong"]})
 
 
 @app.get("/api/texture/<game_id>")
 def texture(game_id):
-    """Отдаём текстуру загаданного блока (имя файла игроку не видно)."""
     game = GAMES.get(game_id)
     if game is None:
         return jsonify({"error": "no_game"}), 404
@@ -242,7 +264,7 @@ def guess():
 
     if correct:
         game["over"] = True
-        game["revealed"] = list(range(SIZE * SIZE))  # победа — показываем всю текстуру
+        game["revealed"] = list(range(SIZE * SIZE))
         save_result(game, won=True)
         return jsonify({"correct": True, "over": True,
                         "attempts": game["wrong"] + 1,
@@ -252,19 +274,20 @@ def guess():
     game["wrong"] += 1
     game["guesses"].append(data.get("guess", "").strip()[:40])
 
-    if game["wrong"] >= MAX_WRONG:
+    if game["wrong"] >= game["max_wrong"]:
         game["over"] = True
         save_result(game, won=False)
         game["revealed"] = list(range(SIZE * SIZE))
-        return jsonify({"correct": False, "over": True, "level": MAX_WRONG,
+        return jsonify({"correct": False, "over": True, "level": game["max_wrong"],
                         "revealed": game["revealed"],
                         "guesses": game["guesses"], "answer": answer})
 
     level = game["wrong"] + 1
-    open_pixels(game, LEVEL_PIXELS[level - 1])
+    open_pixels(game, PIXELS_AFTER[min(level, len(PIXELS_AFTER)) - 1])
     return jsonify({"correct": False, "over": False,
                     "level": level, "revealed": game["revealed"],
                     "guesses": game["guesses"]})
+
 
 @app.post("/api/hint")
 def hint():
@@ -279,9 +302,20 @@ def hint():
     game["hint_used"] = True
     return jsonify({"category": category_of(game["answer"]["id"])})
 
+
+@app.get("/api/catalog")
+def catalog():
+    """Каталог блоков для изучения перед игрой: название + картинка."""
+    difficulty = request.args.get("difficulty", "easy")
+    lang = request.args.get("lang", "ru")
+    key = "ru" if lang == "ru" else "en"
+    items = sorted(POOLS.get(difficulty, []), key=lambda b: b[key].lower())
+    return jsonify([{"name": b[key], "img": f"/static/textures/{b['id']}.png"}
+                    for b in items])
+
+
 @app.get("/api/names")
 def names():
-    """Список названий блоков для подсказок."""
     difficulty = request.args.get("difficulty", "easy")
     lang = request.args.get("lang", "ru")
     key = "ru" if lang == "ru" else "en"
@@ -296,8 +330,6 @@ def results():
         data = json.loads(RESULTS_FILE.read_text(encoding="utf-8"))
         return jsonify(data[-10:][::-1])
     except Exception:
-        # Файл повреждён — убираем его в сторону, игра продолжит работать,
-        # а после первой же сыгранной партии создастся свежий файл.
         try:
             RESULTS_FILE.rename(RESULTS_FILE.with_name("results.broken.json"))
         except Exception:

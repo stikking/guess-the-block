@@ -59,3 +59,19 @@ li.empty { color: #61656b; font-style: italic; }
 .btn.hint:hover { background: #1c7ed6; }
 .btn.hint:disabled { background: #495057; cursor: default; }
 .hintLabel { text-align: center; color: #74c0fc; font-weight: 600; margin: 6px 0 0; }
+/* Кнопка каталога */
+.btn.alt { background: #364fc7; }
+.btn.alt:hover { background: #3b5bdb; }
+
+/* Каталог блоков */
+.catalogHead { display: flex; align-items: center; gap: 10px; }
+.catalogHead h2 { margin: 0; }
+.catGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+           gap: 8px; margin-top: 10px; max-height: 62vh; overflow-y: auto; }
+.catCell { background: #232529; border: 1px solid #3a3d44; border-radius: 8px;
+           padding: 8px 4px; text-align: center; }
+.catCell img { width: 32px; height: 32px; image-rendering: pixelated; }
+.catName { font-size: 11px; color: #cfd3d8; margin-top: 4px; line-height: 1.2; }
+
+/* Уже попробованные варианты в подсказках Профи */
+.sug.tried { color: #868e96; text-decoration: line-through; }

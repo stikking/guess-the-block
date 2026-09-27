@@ -25,10 +25,21 @@
       <button class="btn diff" data-diff="pro"></button>
     </div>
     <button id="startBtn" class="btn big" data-i18n="start"></button>
+    <button id="catalogBtn" class="btn big alt" data-i18n="catalog"></button>
     <p id="startError" class="error"></p>
   </section>
 
-    <!-- Игра -->
+  <!-- Каталог блоков (только перед игрой) -->
+  <section id="catalog" class="hidden">
+    <div class="catalogHead">
+      <button id="catalogBack" class="btn small" data-i18n="back"></button>
+      <h2 data-i18n="catalog"></h2>
+    </div>
+    <input id="catalogFilter" autocomplete="off">
+    <div id="catalogGrid" class="catGrid"></div>
+  </section>
+
+  <!-- Игра -->
   <section id="game" class="hidden">
     <p id="attemptLabel"></p>
     <canvas id="canvas" width="320" height="320"></canvas>
