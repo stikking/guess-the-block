@@ -15,10 +15,15 @@ const STRINGS = {
     guess: "Ответить",
     hint: "Подсказка",
     hintUsed: "Категория блока: «{c}»",
-    categories: { ore: "Руда", metal: "Металлы и минералы", farm: "Фермерство и еда",
-      wood: "Дерево", plants: "Растения", wool: "Шерсть и ткани", sea: "Море",
-      nether: "Незер", end: "Край", light: "Свет", earth: "Земля",
-      stone: "Камень и кирпичи", mechanism: "Механизмы", other: "Другое" },
+    categories: { earth: "Земля, песок и лёд", stone: "Камень и кирпичи",
+      terracotta: "Терракота и глазурь", glass: "Стекло", concrete: "Бетон",
+      wood: "Дерево", construction: "Строительные элементы",
+      metal: "Металлы и минералы", copper: "Медь", ore: "Руда",
+      plants: "Растения", farm: "Фермерство и еда", wool: "Шерсть и ткани",
+      sea: "Море", nether: "Незер", end: "Край", sculk: "Скалк", light: "Свет",
+      redstone: "Механизмы и сигналы", storage: "Хранилища",
+      functional: "Функциональные блоки", deco: "Декор и быт",
+      other: "Без категории" },
     tried: "Уже пробовал(а):",
     win: "🎉 В точку!",
     lose: "😢 Попытки кончились. Это был(а):",
@@ -44,10 +49,15 @@ const STRINGS = {
     guess: "Guess",
     hint: "Hint",
     hintUsed: "Block category: \"{c}\"",
-    categories: { ore: "Ore", metal: "Metals & minerals", farm: "Farming & food",
-      wood: "Wood", plants: "Plants", wool: "Wool & fabric", sea: "Ocean",
-      nether: "The Nether", end: "The End", light: "Light", earth: "Earth",
-      stone: "Stone & bricks", mechanism: "Mechanisms", other: "Other" },
+    categories: { earth: "Earth, sand & ice", stone: "Stone & bricks",
+      terracotta: "Terracotta & glazed", glass: "Glass", concrete: "Concrete",
+      wood: "Wood", construction: "Building elements",
+      metal: "Metals & minerals", copper: "Copper", ore: "Ore",
+      plants: "Plants", farm: "Farming & food", wool: "Wool & fabric",
+      sea: "Ocean", nether: "The Nether", end: "The End", sculk: "Sculk",
+      light: "Light", redstone: "Redstone & signals", storage: "Storage",
+      functional: "Functional blocks", deco: "Decor & household",
+      other: "Uncategorized" },
     tried: "Already tried:",
     win: "🎉 Nailed it!",
     lose: "😢 Out of tries. It was:",
@@ -67,14 +77,14 @@ let gameId = null;
 let revealed = [];
 let tex = null;
 let currentLevel = 0;
-let maxWrong = 4;          // попыток в текущей игре (5 в Профи)
+let maxWrong = 4;
 let names = [];
 let proNames = [];
 let sugIndex = -1;
 let suppressFocus = false;
 let hintCategory = null;
-let triedList = [];        // что игрок уже называл (для подсветки)
-let catalogItems = [];     // содержимое каталога
+let triedList = [];
+let catalogItems = [];
 
 const $ = (id) => document.getElementById(id);
 
@@ -187,7 +197,6 @@ function renderSuggestions() {
   if (!matches.length) { hideSuggestions(); return; }
   if (sugIndex >= matches.length) sugIndex = matches.length - 1;
 
-  // Уже попробованные варианты — серым с зачёркиванием
   const triedSet = new Set(triedList.map(norm));
 
   const half = Math.ceil(matches.length / 2);
@@ -231,7 +240,7 @@ function moveSuggestion(step) {
 async function openCatalog() {
   try {
     const res = await fetch(`/api/catalog?difficulty=${difficulty}&lang=${lang}`);
-    catalogItems = await res.json();   // теперь массив групп по категориям
+    catalogItems = await res.json();
   } catch (e) {
     catalogItems = [];
   }
@@ -248,7 +257,7 @@ function renderCatalog() {
   grid.innerHTML = "";
   for (const group of catalogItems) {
     const items = q ? group.items.filter(i => norm(i.name).includes(q)) : group.items;
-    if (!items.length) continue;   // при поиске прячем пустые категории
+    if (!items.length) continue;
 
     const head = document.createElement("div");
     head.className = "catHead";
@@ -271,6 +280,7 @@ function renderCatalog() {
     }
   }
 }
+
 // ---------- Игра ----------
 async function startGame() {
   const nick = $("nickname").value.trim();
