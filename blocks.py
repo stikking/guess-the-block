@@ -93,7 +93,7 @@ MEDIUM_BLOCKS = [
     {"id": "brown_mushroom_block", "ru": "Коричневый гриб", "en": "Brown Mushroom Block"},
     {"id": "jack_o_lantern", "ru": "Светящаяся тыква", "en": "Jack o'Lantern"},
     {"id": "note_block", "ru": "Музыкальный блок", "en": "Note Block"},
-    {"id": "jukebox_side", "ru": "Проигрыватель", "en": "Jukebox"},
+    {"id": "jukebox_top", "ru": "Проигрыватель", "en": "Jukebox"},
     {"id": "target_side", "ru": "Мишень", "en": "Target"},
     {"id": "lodestone_side", "ru": "Магнетит", "en": "Lodestone"},
     {"id": "shroomlight", "ru": "Грибосвет", "en": "Shroomlight"},

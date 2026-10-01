@@ -13,6 +13,8 @@ venv/
 # Локальные файлы (запасной перевод, если будешь подкладывать)
 ru_ru.json
 
+winners_parser.py
+
 # Системное
 .DS_Store
 Thumbs.db
