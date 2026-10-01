@@ -26,7 +26,6 @@ SKIP = {f"destroy_stage_{i}" for i in range(10)} | \
     "fire_0", "fire_1", "soul_fire_0", "soul_fire_1",
     "water_still", "water_flow", "water_overlay",
     "lava_still", "lava_flow",
-    "campfire_fire", "soul_campfire_fire",
     "attached_melon_stem", "attached_pumpkin_stem",
 }
 SKIP_ENDINGS = ("_overlay",)

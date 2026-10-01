@@ -2,28 +2,35 @@
 const STRINGS = {
   ru: {
     subtitle: "Игра загадывает блок и показывает 1 случайный пиксель текстуры. С каждой ошибкой пикселей становится больше (1 → 4 → 9 → 16). Попыток: 4, в Профи — 5 (последняя открывает ещё 5 пикселей). Совет: перед игрой загляни в каталог блоков!",
-    nickname: "Твой никнейм:",
+    nickname: "Введите ваш алиас в telegram:",
     difficulty: "Сложность:",
     easy: "Лёгкая", medium: "Средняя", pro: "Профи",
     start: "Начать игру",
     catalog: "Каталог блоков",
     back: "← Назад",
     catalogFilter: "Найти блок...",
-    enterNickname: "Сначала введи никнейм 🙂",
+    enterNickname: "Сначала введи алиас 🙂",
     attempt: "Попытка {n} из {m}",
     guessPlaceholder: "Введи название блока...",
     guess: "Ответить",
     hint: "Подсказка",
     hintUsed: "Категория блока: «{c}»",
+    // Полные категории (Профи)
     categories: { earth: "Земля, песок и лёд", stone: "Камень и кирпичи",
       terracotta: "Терракота и глазурь", glass: "Стекло", concrete: "Бетон",
-      wood: "Дерево", construction: "Строительные элементы",
+      wood: "Дерево", construction: "Двери, люки и ограды",
       metal: "Металлы и минералы", copper: "Медь", ore: "Руда",
       plants: "Растения", farm: "Фермерство и еда", wool: "Шерсть и ткани",
       sea: "Море", nether: "Незер", end: "Край", sculk: "Скалк", light: "Свет",
       redstone: "Механизмы и сигналы", storage: "Хранилища",
       functional: "Функциональные блоки", deco: "Декор и быт",
       other: "Без категории" },
+    // Слитые категории (лёгкая и средняя) — те же 10, что и в каталоге
+    easyCats: { earth: "Земля, песок и лёд", stone_glass: "Камень, стекло и бетон",
+      wood_build: "Дерево, двери и ограды", metal_ore: "Металлы и руда",
+      plants_sea: "Растения и море", farm: "Фермерство и еда",
+      wool: "Шерсть и ткани", nether_end: "Незер и Край", light: "Свет",
+      tech_utility: "Механизмы и полезные блоки" },
     tried: "Уже пробовал(а):",
     win: "🎉 В точку!",
     lose: "😢 Попытки кончились. Это был(а):",
@@ -36,14 +43,14 @@ const STRINGS = {
   },
   en: {
     subtitle: "The game picks a block and shows 1 random pixel of its texture. Each miss reveals more pixels (1 → 4 → 9 → 16). You have 4 tries — 5 in Pro (the last one reveals 5 more pixels). Tip: browse the block catalog before playing!",
-    nickname: "Your nickname:",
+    nickname: "Enter your Telegram alias",
     difficulty: "Difficulty:",
     easy: "Easy", medium: "Medium", pro: "Pro",
     start: "Start game",
     catalog: "Block catalog",
     back: "← Back",
     catalogFilter: "Find a block...",
-    enterNickname: "Enter a nickname first 🙂",
+    enterNickname: "Enter a alias first 🙂",
     attempt: "Attempt {n} of {m}",
     guessPlaceholder: "Type the block name...",
     guess: "Guess",
@@ -51,13 +58,18 @@ const STRINGS = {
     hintUsed: "Block category: \"{c}\"",
     categories: { earth: "Earth, sand & ice", stone: "Stone & bricks",
       terracotta: "Terracotta & glazed", glass: "Glass", concrete: "Concrete",
-      wood: "Wood", construction: "Building elements",
+      wood: "Wood", construction: "Doors, trapdoors & fences",
       metal: "Metals & minerals", copper: "Copper", ore: "Ore",
       plants: "Plants", farm: "Farming & food", wool: "Wool & fabric",
       sea: "Ocean", nether: "The Nether", end: "The End", sculk: "Sculk",
       light: "Light", redstone: "Redstone & signals", storage: "Storage",
       functional: "Functional blocks", deco: "Decor & household",
       other: "Uncategorized" },
+    easyCats: { earth: "Earth, sand & ice", stone_glass: "Stone, glass & concrete",
+      wood_build: "Wood, doors & fences", metal_ore: "Metals & ore",
+      plants_sea: "Plants & sea", farm: "Farming & food",
+      wool: "Wool & fabric", nether_end: "The Nether & The End", light: "Light",
+      tech_utility: "Redstone & utility" },
     tried: "Already tried:",
     win: "🎉 Nailed it!",
     lose: "😢 Out of tries. It was:",
@@ -82,7 +94,9 @@ let names = [];
 let proNames = [];
 let sugIndex = -1;
 let suppressFocus = false;
-let hintCategory = null;
+let hintCats = [];    // показанные категории подсказки
+let hintTotal = 1;    // сколько у блока всего категорий
+let hintStage = 0;    // 0 — не использована, 1 — первая, 2 — обе
 let triedList = [];
 let catalogItems = [];
 
@@ -94,6 +108,11 @@ function t(key, vars) {
   return s;
 }
 
+// Словарь категорий для текущей сложности
+function catsDict() {
+  return difficulty === "pro" ? STRINGS[lang].categories : STRINGS[lang].easyCats;
+}
+
 function applyLang() {
   document.querySelectorAll("[data-i18n]").forEach(el => el.textContent = t(el.dataset.i18n));
   document.querySelectorAll(".diff").forEach(b => b.textContent = t(b.dataset.diff));
@@ -102,10 +121,7 @@ function applyLang() {
   $("catalogFilter").placeholder = t("catalogFilter");
   document.documentElement.lang = lang;
   if (currentLevel) $("attemptLabel").textContent = t("attempt", {n: currentLevel, m: maxWrong});
-  if (hintCategory) {
-    const cats = STRINGS[lang].categories;
-    $("hintLabel").textContent = t("hintUsed", {c: cats[hintCategory] || cats.other});
-  }
+  renderHint();
 }
 
 function applyInputMode() {
@@ -122,6 +138,24 @@ function focusGuessInput() {
   suppressFocus = true;
   $("guessInput").focus();
   setTimeout(() => { suppressFocus = false; }, 0);
+}
+
+// ---------- Подсказка ----------
+function renderHint() {
+  const label = $("hintLabel");
+  if (!hintCats.length) {
+    label.classList.add("hidden");
+    label.textContent = "";
+    return;
+  }
+  const cats = catsDict();
+  const names = hintCats.map(c => cats[c] || c);
+  // После первого нажатия при наличии второй категории: «Первая | ?»
+  const text = (hintStage === 1 && hintTotal > 1)
+    ? names[0] + " | ?"
+    : names.join(" | ");
+  label.textContent = t("hintUsed", {c: text});
+  label.classList.remove("hidden");
 }
 
 // ---------- Чипсы «уже пробовал(а)» ----------
@@ -252,7 +286,7 @@ async function openCatalog() {
 
 function renderCatalog() {
   const q = norm($("catalogFilter").value);
-  const cats = STRINGS[lang].categories;
+  const cats = catsDict();
   const grid = $("catalogGrid");
   grid.innerHTML = "";
   for (const group of catalogItems) {
@@ -313,10 +347,11 @@ async function startGame() {
   $("attemptLabel").textContent = t("attempt", {n: 1, m: maxWrong});
   $("guessInput").value = "";
   renderGuesses(data.guesses);
-  hintCategory = null;
+  hintCats = [];
+  hintTotal = 1;
+  hintStage = 0;
   $("hintBtn").disabled = false;
-  $("hintLabel").classList.add("hidden");
-  $("hintLabel").textContent = "";
+  renderHint();
   hideSuggestions();
   focusGuessInput();
 
@@ -497,6 +532,8 @@ document.addEventListener("click", e => {
   if (!e.target.closest(".guessBox")) hideSuggestions();
 });
 
+// Кнопка подсказки: 1-е нажатие — первая категория (если есть вторая —
+// «Первая | ?»), 2-е нажатие — вторая категория. Больше двух — нельзя.
  $("hintBtn").onclick = async () => {
   if (!gameId || $("hintBtn").disabled) return;
   const res = await fetch("/api/hint", {
@@ -506,12 +543,11 @@ document.addEventListener("click", e => {
   });
   if (!res.ok) return;
   const data = await res.json();
-  hintCategory = data.category;
-  $("hintBtn").disabled = true;
-  const cats = STRINGS[lang].categories;
-  const label = $("hintLabel");
-  label.textContent = t("hintUsed", {c: cats[hintCategory] || cats.other});
-  label.classList.remove("hidden");
+  hintStage = data.stage;
+  hintTotal = data.total;
+  hintCats = data.categories;
+  if (hintStage === 2 || hintTotal === 1) $("hintBtn").disabled = true;
+  renderHint();
 };
 
  $("againBtn").onclick = () => {

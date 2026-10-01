@@ -27,7 +27,7 @@ EASY_BLOCKS = [
     {"id": "glass", "ru": "Стекло", "en": "Glass"},
     {"id": "bricks", "ru": "Кирпичный блок", "en": "Bricks"},
     {"id": "bookshelf", "ru": "Книжная полка", "en": "Bookshelf"},
-    {"id": "crafting_table_top", "ru": "Верстак", "en": "Crafting Table"},
+    {"id": "crafting_table_front", "ru": "Верстак", "en": "Crafting Table"},
     {"id": "furnace_front", "ru": "Печка", "en": "Furnace"},
     {"id": "tnt_side", "ru": "ТНТ", "en": "TNT"},
     {"id": "diamond_block", "ru": "Алмазный блок", "en": "Block of Diamond"},
